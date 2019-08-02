@@ -1,0 +1,126 @@
+---
+title: "Coursera-Pratical-Machine_learning-Assginment"
+author: "Peng Lu"
+date: "30/07/2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+```{r}
+##Read training and test datasets into R environment
+pml_raw <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", header = TRUE)
+pml_validation <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", header = TRUE)
+
+##Check both Training and testing datasets
+dim(pml_raw);dim(pml_validation)
+```
+
+## Preprocessing data
+
+```{r}
+#Load package for this process
+if (!require(caret)) install.packages("caret")
+library(caret)
+if (!require(e1071)) install.packages("e1071")
+library(e1071)
+##split raw data into training and testing datasets
+set.seed(123)
+split_label <- createDataPartition(y=pml_raw$classe,p=0.7,list = FALSE)
+
+train<-pml_raw[split_label,]
+test<-pml_raw[-split_label,]
+
+dim(train); dim(test)
+
+## remove unique data columns
+NZV <- nearZeroVar(train, freqCut = 19)
+train <- train[,-NZV]
+test<- test[,-NZV]
+
+##remove columns with mostly null values
+nul_label <- sapply(train, function(x) mean(is.na(x))) >0.95
+train<- train[,nul_label==FALSE]
+test<- test[,nul_label==FALSE]
+
+## remove identification variables
+train<-train[,-c(1:5)]
+test<-test[,-c(1:5)]
+```
+
+## Data Exploratory Analysis
+
+```{r}
+#Load package for this process
+if (!require(corrplot)) install.packages("corrplot")
+library(corrplot)
+##Check some of columns in the dataset
+summary(pml_raw$classe)
+
+##Show correlation between all variables
+corrplot(cor(train[,-54]), method = "color", type = "lower", order = "FPC", tl.cex=0.8, tl.col = rgb(0,0,0))
+```
+
+##Model Selection Process
+
+###Decision Tree
+```{r}
+# Load package for this process
+if (!require(rpart)) install.packages("rpart")
+if (!require(rpart.plot)) install.packages("rpart.plot")
+library(rpart.plot);library(rpart)
+if (!require(rattle)) install.packages("rattle")
+library(rattle)
+
+## Modeling process
+dt_model <- rpart(classe ~ ., data=train, method = 'class')
+
+fancyRpartPlot(dt_model)
+
+dt_test_predict <- predict(dt_model, test, type = "class")
+conf_matrix_dt_test <- confusionMatrix(dt_test_predict, test$classe)
+conf_matrix_dt_test
+```
+
+###Random Forest
+```{r}
+if (!require(randomForest)) install.packages("randomForest")
+library(randomForest)
+
+set.seed(123)
+rf_model <- randomForest(classe ~ ., data=train, importance=TRUE)
+
+rf_test_predict <- predict(rf_model, test, type="class")
+conf_matrix_rf_test <- confusionMatrix(rf_test_predict, test$classe)
+conf_matrix_rf_test
+```
+
+###Data Validation
+The random forest model has been decided using to predict the test data due to the over 99% accuracy and Kappa rate.
+```{r}
+pml_validation <- pml_validation[,-NZV]
+pml_validation<- pml_validation[,nul_label==FALSE]
+pml_validation<-pml_validation[,-c(1:5)]
+
+predict(rf_model, pml_validation, type="class")
+
+```
